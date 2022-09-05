@@ -2,13 +2,16 @@ const debug = require("debug")("action-dashboard:actions");
 const _ = require("lodash");
 const dayjs = require("dayjs");
 const pLimit = require("p-limit");
-
+const dataForge = require('data-forge');
+const { default: axios } = require("axios");
+require('data-forge-fs');
 class Actions {
   constructor(gitHub, runStatus, lookbackDays) {
     this._gitHub = gitHub;
     this._runStatus = runStatus;
     // Cache all workflows to speed up refresh
     this._runs = [];
+    this._scores = [];
     this._refreshingRuns = false;
     this._lookbackDays = lookbackDays;
   }
@@ -176,6 +179,71 @@ class Actions {
 
     return this._runs;
   }
+
+  async downloadArtifact(repoOwner, repoName, artifactId) { 
+    const artifact = await this._gitHub.downloadWorflowArtifact(repoOwner, repoName, artifactId);
+    return artifact; 
+  }
+
+  async downloadWorkflowRunArtifact(repoOwner, repoName, runId) { 
+      const runArtifacts = await this._gitHub.listWorkflowRunArtifacts(repoOwner, repoName, runId);
+      return runArtifacts; 
+  }
+
+  async getCVEScore(data) {
+    let scores = []
+    for (const vuln of data) {
+      const res = await axios.get(`https://services.nvd.nist.gov/rest/json/cve/1.0/${vuln}?apiKey=5cb1bbbd-9b0f-487e-a7db-06f642f91a5a`)
+      scores.push(res.data.result.CVE_Items[0].impact.baseMetricV3.cvssV3.baseSeverity)
+    }
+
+    return scores
+  }
+  getReportData(runId) { 
+    const result = {};
+    let data = dataForge.readFileSync('/tmp/arvos-report.csv').parseCSV().renameSeries(
+      { "ID": "id",
+        "Vulnerability": "vulnerability",
+        "Vulnerability Detail": "detail",
+        "Score": "score",
+        "Description": "description",
+        "Invoked Class": "class",
+        "Invoked Method": "method",
+        "Package name": "package",
+        "Github Repository": "repo",
+        "Package manager": "manager",
+        "Version range": "range",
+        "Stacktrace": "stacktrace"
+      })
+
+    result.vulns = data.toArray();
+    result.vulns_count = data.count();
+    result.vuln_packages = data.getSeries('package').distinct().count()
+
+    const sumObjectsByKey = (...objs) => {
+      const res = objs.reduce((a, b) => {
+          for (let k in b) {
+            if (b.hasOwnProperty(k))
+            a[k] = (a[k] || 0) + b[k];
+          }
+          return a;
+      }, {});
+      return res;
+    }
+
+    let scoreCountInit = {'CRITICAL':0, 'HIGH': 0, 'MEDIUM': 0, 'LOW':0}
+    let arr = data.getSeries('score').toArray()
+    var scoreCount = arr.reduce((acc, val) => {
+      acc[val] = acc[val] === undefined ? 1 : acc[val] += 1;
+      return acc;
+    }, {});
+    
+    let scores = sumObjectsByKey(scoreCountInit, scoreCount )
+    result.pieData = [scores['CRITICAL'], scores['HIGH'], scores['MEDIUM'], scores['LOW']]
+
+    return result;
+  }
+
 }
 
 module.exports = Actions;

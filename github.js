@@ -3,7 +3,9 @@ const { throttling } = require("@octokit/plugin-throttling");
 const { retry } = require("@octokit/plugin-retry");
 const { Octokit } = require("@octokit/rest");
 const debug = require("debug")("action-dashboard:github");
-
+const {Buffer} = require('buffer');
+const fs = require('fs');
+const unzipper = require('unzipper');
 class GitHub {
   constructor(
     _org,
@@ -71,6 +73,49 @@ class GitHub {
     }
   }
 
+  async listWorkflowRunArtifacts(repoOwner, repoName, runId) { 
+    try {
+      const workflowRunArtifacts = await this._octokit.actions.listWorkflowRunArtifacts(
+        {owner: repoOwner, repo: repoName, run_id: runId}
+      ); 
+      const artifact = workflowRunArtifacts.data.artifacts.find(el => el.name == "arvos-report");
+      const response = await this._octokit.actions.downloadArtifact({
+        owner: repoOwner,
+        repo: repoName,
+        artifact_id: artifact.id,
+        archive_format: "zip",
+      })
+      if (response.status == 200) {
+        fs.writeFile('/tmp/arvos-report.zip', Buffer.from(response.data), () => {
+          fs.createReadStream('/tmp/arvos-report.zip')
+            .pipe(unzipper.Extract({ path: '/tmp/' }));
+        } );
+      } else {
+          console.log(`ERROR >> ${res.status}`);
+      }
+      
+      return workflowRunArtifacts;
+    } catch (e) { 
+      console.error('Error getting workflow run artifacts', e)
+      return [];
+    }
+  }
+
+  async downloadWorflowArtifact(repoOwner, repoName, artifactId) { 
+    try { 
+      const output = await this._octokit.actions.downloadArtifact({
+        owner: repoOwner,
+        repo: repoName,
+        artifact_id: artifactId,
+        archive_format: "zip",
+      });
+      return output;
+    } catch (e) { 
+      console.error("Error getting runs", e);
+      return [];
+    }
+  }
+
   async listWorkflowsForRepo(repoName, repoOwner) {
     try {
       const workflows = await this._octokit.paginate(
@@ -116,6 +161,8 @@ class GitHub {
       return null;
     }
   }
+
+
 }
 
 module.exports = GitHub;

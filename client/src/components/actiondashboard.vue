@@ -46,8 +46,135 @@
 
             <template v-slot:item.actions="{ item }">
                 <v-icon small @click="refreshRun(item)"> mdi-refresh </v-icon>
+                <v-icon small @click="showReport(item)"> mdi-chart-pie </v-icon>
             </template>
         </v-data-table>
+        <v-dialog
+            v-model="loadingDialog"
+            hide-overlay
+            persistent
+            width="300"
+            >
+            <v-card
+                color="primary"
+                dark
+            >
+                <v-card-text class="py-5">
+                Please stand by
+                <v-progress-linear
+                    indeterminate
+                    color="white"
+                    class="mb-0"
+                ></v-progress-linear>
+                </v-card-text>
+            </v-card>
+        </v-dialog>
+        <v-dialog
+            v-model="dialog"
+            fullscreen
+            hide-overlay
+            transition="dialog-bottom-transition"
+        >
+            <v-card>
+                <v-toolbar
+                dark
+                color="primary"
+                >
+                <v-btn
+                    icon
+                    dark
+                    @click="dialog = false"
+                >
+                    <v-icon>mdi-close</v-icon>
+                </v-btn>
+                <v-toolbar-title>Arvos Dashboard > {{ workflowBranch }}</v-toolbar-title>
+                <v-spacer></v-spacer>
+                </v-toolbar>
+                <v-container class="mt-10">
+                    <v-row>
+                        <v-col cols="1"></v-col>
+                        <v-col cols="3">
+                        <v-card
+                            color="#C62828"
+                            dark
+                            height="200"
+                        >
+                            <v-card-title class="text-h1 font-weight-bold">
+                                {{ vulns_count }}
+                            </v-card-title>
+                            <v-card-subtitle class="text-h5">Vulnerabilites</v-card-subtitle>
+                        </v-card>
+                        </v-col>
+                        <v-col cols="3">
+                        <v-card
+                            color="#00695C"
+                            dark
+                            height="200"
+                        >
+                            <v-card-title class="text-h1 font-weight-bold">
+                            {{ vuln_packages  }}
+                            </v-card-title>
+                            <v-card-subtitle class="text-h5">Packages</v-card-subtitle>
+                        </v-card>
+                        </v-col>
+                        <v-col cols="1"></v-col>
+                        <v-col cols="4">
+                            <Pie
+                                :chart-options="chartOptions"
+                                :chart-data="chartData"
+                                :chart-id="chartId"
+                                :dataset-id-key="datasetIdKey"
+                                :plugins="plugins"
+                                :css-classes="cssClasses"
+                                :styles="styles"
+                                height="200"
+                            /> 
+                        </v-col>
+                    </v-row>
+
+                    <v-data-table
+                        :headers="tableheaders"
+                        :items="vulns"
+                        class="elevation-1 mt-10"
+                        single-expand="true"
+                        :expanded.sync="expanded"
+                        show-expand
+                        disable-sort
+                    >
+                        <template v-slot:item.repo="{ item }">
+                            <a :href="`${item.repo}`" target="_blank">{{ item.repo | repoName }}</a> 
+                        </template>
+                    
+                        <template v-slot:item.vulnerability="{ item }">
+                            <a :href="`https://nvd.nist.gov/vuln/detail/${item.vulnerability}`" target="_blank">{{ item.vulnerability }}</a> 
+                            <v-chip
+                                :color="getCVEScore(item.score)"
+                                dark
+                                x-small
+                                class="ml-1"
+                            >
+                            {{ item.score }}
+                            </v-chip>
+                        </template>
+                        <template v-slot:expanded-item="{ headers, item }">
+                            <td class="pa-5" :colspan="headers.length">
+                                {{ item.description  }}
+                            <v-divider class="mt-2"></v-divider>
+                            <v-system-bar
+                                window
+                                dark
+                                class="mt-3"
+                                >
+                                <v-icon>mdi-chevron-right</v-icon>
+                                <span class="font-weight-bold">{{ item.stacktrace }}</span>
+                                <v-spacer></v-spacer>
+                            </v-system-bar>
+                             
+                            </td>
+                        </template>
+                    </v-data-table>
+            </v-card>
+        </v-dialog>
     </v-container>
 </template>
 
@@ -56,9 +183,56 @@ import axios from "axios";
 import findIndex from "lodash-es/findIndex";
 import * as dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
+// import fs from "fs"
 dayjs.extend(duration);
+import { Pie } from 'vue-chartjs/legacy'
+
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  CategoryScale
+} from 'chart.js'
+
+ChartJS.register(Title, Tooltip, Legend, ArcElement, CategoryScale)
 
 export default {
+    name: 'PieChart',
+    components: {
+        Pie
+    },
+    props: {
+        chartId: {
+        type: String,
+        default: 'pie-chart'
+        },
+        datasetIdKey: {
+        type: String,
+        default: 'label'
+        },
+        width: {
+        type: Number,
+        default: 200
+        },
+        height: {
+        type: Number,
+        default: 200
+        },
+        cssClasses: {
+        default: '',
+        type: String
+        },
+        styles: {
+        type: Object,
+        default: () => {}
+        },
+        plugins: {
+        type: Array,
+        default: () => []
+        }
+    },
     sockets: {
         updatedRun(run) {
             console.log("updatedRun runId: " + run.runId);
@@ -75,10 +249,40 @@ export default {
     },
     data() {
         return {
+            tableheaders: [
+                { text: 'ID', value: 'id', align: 'start' },
+                { text: 'Vulnerability', value: 'vulnerability' },
+                { text: 'Invoked Class', value: 'class' },
+                { text: 'Invoked Method', value: 'method' },
+                { text: 'Package', value: 'package' },
+                { text: 'Github Repo', value: 'repo' },
+                { text: 'Version range', value: 'range' },
+                { text: '', value: 'data-table-expand' },
+                ],
+            vulns: [],
+            vulns_count: 0,
+            vuln_packages: 0,
             search: "",
             runs: [],
+            workflowId: "",
             loading: false,
-        };
+            dialog: false,
+            loadingDialog: false,
+            expanded: [],
+            chartData: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [
+                    {
+                        backgroundColor: ['#DD1B16', '#E46651', '#00D8FF', '#41B883'],
+                        data: []
+                    }
+                ]
+            },
+            chartOptions: {
+                responsive: false,
+                maintainAspectRatio: false
+            }
+            }
     },
     computed: {
         headers() {
@@ -123,9 +327,26 @@ export default {
                 return dayjs.duration(val).format(format);
             }
             else return val;
+        },
+        repoName(val) {
+            return val.split('/').pop()
         }
     },
     methods: {
+        getCVEScore (score) {
+            switch (score) {
+                case 'CRITICAL':
+                    return '#DD1B16'
+                case 'HIGH':
+                    return '#E46651'
+                case 'MEDIUM':
+                    return '#00D8FF'
+                case 'LOW':
+                    return '#41B883'
+                default:
+                    return ''
+            }
+        },
         getData() {
             this.loading = true;
             axios
@@ -150,6 +371,22 @@ export default {
             axios.get(`/api/runs/${run.owner}/${run.repo}/${run.workflowId}`).catch((err) => {
                 console.log("refreshRun", err);
             });
+        },
+        showReport(run) { 
+            // this.dialog = true 
+            this.loadingDialog = true 
+            let self = this
+            axios.get(`/api/downloadReport/${run.owner}/${run.repo}/${run.runId}`).then(() => {
+                axios.get(`/api/showReport/${run.runId}`).then((res) => {
+                    self.vulns = res.data.vulns
+                    self.vulns_count = res.data.vulns_count
+                    self.vuln_packages = res.data.vuln_packages
+                    self.chartData.datasets[0].data = res.data.pieData
+                    self.workflowBranch = run.branch
+                    this.loadingDialog = false
+                    this.dialog = true
+                })
+            })
         },
         filterOnlyCapsText(value, search) {
             return value != null && search != null && typeof value === "string" && value.toString().indexOf(search) !== -1;
