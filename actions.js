@@ -217,7 +217,8 @@ class Actions {
       })
 
     result.vulns = data.toArray();
-    result.vulns_count = data.count();
+    result.vulns_count = data.getSeries('vulnerability').distinct().count();
+    result.symbols_count = data.count()
     result.vuln_packages = data.getSeries('package').distinct().count()
 
     const sumObjectsByKey = (...objs) => {
@@ -232,7 +233,8 @@ class Actions {
     }
 
     let scoreCountInit = {'CRITICAL':0, 'HIGH': 0, 'MEDIUM': 0, 'LOW':0}
-    let arr = data.getSeries('score').toArray()
+    let uniqVulns = data.distinct(vuln => vuln.vulnerability)
+    let arr = uniqVulns.getSeries('score').toArray()
     var scoreCount = arr.reduce((acc, val) => {
       acc[val] = acc[val] === undefined ? 1 : acc[val] += 1;
       return acc;

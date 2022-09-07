@@ -45,8 +45,18 @@
             </template>
 
             <template v-slot:item.actions="{ item }">
-                <v-icon small @click="refreshRun(item)"> mdi-refresh </v-icon>
-                <v-icon small @click="showReport(item)"> mdi-chart-pie </v-icon>
+                <v-tooltip bottom>
+                    <template v-slot:activator="{ on, attrs }">
+                        <v-icon large color="green darken-2" v-bind="attrs" v-on="on" @click="refreshRun(item)"> mdi-refresh </v-icon>
+                    </template>
+                    <span>Refresh</span>
+                </v-tooltip>
+                <v-tooltip bottom>
+                    <template v-slot:activator="{ on, attrs }">
+                        <v-icon large color="purple darken-2" v-bind="attrs" v-on="on"  @click="showReport(item)"> mdi-chart-pie </v-icon>
+                    </template>
+                    <span>Report</span>
+                </v-tooltip>
             </template>
         </v-data-table>
         <v-dialog
@@ -70,6 +80,24 @@
             </v-card>
         </v-dialog>
         <v-dialog
+            transition="dialog-bottom-transition"
+            max-width="600"
+            v-model="errorDialog"
+        >
+            <v-card>
+                <v-toolbar color="red" class="white--text" >
+                    Message
+                    <v-spacer></v-spacer>
+                    <v-btn icon @click="errorDialog = false">
+                        <v-icon color="white">mdi-close</v-icon>
+                    </v-btn>
+                </v-toolbar>
+                <v-card-text>
+                    <div class="text-h5 pa-12">Arvos scan has not been detected on this branch.</div>
+                </v-card-text>
+            </v-card>
+        </v-dialog>
+        <v-dialog
             v-model="dialog"
             fullscreen
             hide-overlay
@@ -87,23 +115,35 @@
                 >
                     <v-icon>mdi-close</v-icon>
                 </v-btn>
-                <v-toolbar-title>Arvos Dashboard > {{ workflowBranch }}</v-toolbar-title>
+                <v-toolbar-title>Arvos Dashboard >  {{ workflowBranch }}</v-toolbar-title>
                 <v-spacer></v-spacer>
                 </v-toolbar>
                 <v-container class="mt-10">
                     <v-row>
-                        <v-col cols="1"></v-col>
+                        <!-- <v-col cols="1"></v-col> -->
                         <v-col cols="3">
-                        <v-card
-                            color="#C62828"
-                            dark
-                            height="200"
-                        >
-                            <v-card-title class="text-h1 font-weight-bold">
-                                {{ vulns_count }}
-                            </v-card-title>
-                            <v-card-subtitle class="text-h5">Vulnerabilites</v-card-subtitle>
-                        </v-card>
+                                <v-card
+                                color="#690b3d"
+                                dark
+                                height="200"
+                            >
+                                <v-card-title class="text-h1 font-weight-bold">
+                                    {{ symbols_count }}
+                                </v-card-title>
+                                <v-card-subtitle class="text-h5">Symbols</v-card-subtitle>
+                            </v-card>
+                        </v-col>
+                        <v-col cols="3">
+                                <v-card
+                                color="#C62828"
+                                dark
+                                height="200"
+                            >
+                                <v-card-title class="text-h1 font-weight-bold">
+                                    {{ vulns_count }}
+                                </v-card-title>
+                                <v-card-subtitle class="text-h5">Vulnerabilites</v-card-subtitle>
+                            </v-card>
                         </v-col>
                         <v-col cols="3">
                         <v-card
@@ -117,8 +157,8 @@
                             <v-card-subtitle class="text-h5">Packages</v-card-subtitle>
                         </v-card>
                         </v-col>
-                        <v-col cols="1"></v-col>
-                        <v-col cols="4">
+                        <!-- <v-col cols="1"></v-col> -->
+                        <v-col cols="3">
                             <Pie
                                 :chart-options="chartOptions"
                                 :chart-data="chartData"
@@ -251,7 +291,7 @@ export default {
         return {
             tableheaders: [
                 { text: 'ID', value: 'id', align: 'start' },
-                { text: 'Vulnerability', value: 'vulnerability' },
+                { text: 'Vulnerability', value: 'vulnerability', sortable: true },
                 { text: 'Invoked Class', value: 'class' },
                 { text: 'Invoked Method', value: 'method' },
                 { text: 'Package', value: 'package' },
@@ -261,6 +301,7 @@ export default {
                 ],
             vulns: [],
             vulns_count: 0,
+            symbols_count: 0,
             vuln_packages: 0,
             search: "",
             runs: [],
@@ -268,6 +309,7 @@ export default {
             loading: false,
             dialog: false,
             loadingDialog: false,
+            errorDialog: false,
             expanded: [],
             chartData: {
                 labels: ['Critical', 'High', 'Medium', 'Low'],
@@ -376,17 +418,24 @@ export default {
             // this.dialog = true 
             this.loadingDialog = true 
             let self = this
-            axios.get(`/api/downloadReport/${run.owner}/${run.repo}/${run.runId}`).then(() => {
-                axios.get(`/api/showReport/${run.runId}`).then((res) => {
-                    self.vulns = res.data.vulns
-                    self.vulns_count = res.data.vulns_count
-                    self.vuln_packages = res.data.vuln_packages
-                    self.chartData.datasets[0].data = res.data.pieData
-                    self.workflowBranch = run.branch
-                    this.loadingDialog = false
-                    this.dialog = true
-                })
-            })
+            axios.get(`/api/downloadReport/${run.owner}/${run.repo}/${run.runId}`)
+                .then((r) => {
+                    if (r.data) {
+                        axios.get(`/api/showReport/${run.runId}`).then((res) => {
+                            self.vulns = res.data.vulns
+                            self.vulns_count = res.data.vulns_count
+                            self.symbols_count = res.data.symbols_count
+                            self.vuln_packages = res.data.vuln_packages
+                            self.chartData.datasets[0].data = res.data.pieData
+                            self.workflowBranch = run.branch
+                            this.loadingDialog = false
+                            this.dialog = true
+                        })
+                    } else {
+                        this.loadingDialog = false
+                        this.errorDialog = true
+                    }
+                }).catch(err => console.log(err))
         },
         filterOnlyCapsText(value, search) {
             return value != null && search != null && typeof value === "string" && value.toString().indexOf(search) !== -1;

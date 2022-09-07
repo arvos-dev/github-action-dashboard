@@ -5,7 +5,7 @@ const { Octokit } = require("@octokit/rest");
 const debug = require("debug")("action-dashboard:github");
 const {Buffer} = require('buffer');
 const fs = require('fs');
-const unzipper = require('unzipper');
+const unzip = require('unzipper');
 class GitHub {
   constructor(
     _org,
@@ -79,6 +79,9 @@ class GitHub {
         {owner: repoOwner, repo: repoName, run_id: runId}
       ); 
       const artifact = workflowRunArtifacts.data.artifacts.find(el => el.name == "arvos-report");
+      if (!artifact) {
+        return null
+      } 
       const response = await this._octokit.actions.downloadArtifact({
         owner: repoOwner,
         repo: repoName,
@@ -86,10 +89,16 @@ class GitHub {
         archive_format: "zip",
       })
       if (response.status == 200) {
-        fs.writeFile('/tmp/arvos-report.zip', Buffer.from(response.data), () => {
-          fs.createReadStream('/tmp/arvos-report.zip')
-            .pipe(unzipper.Extract({ path: '/tmp/' }));
-        } );
+        await fs.promises.writeFile('/tmp/arvos-report.zip', Buffer.from(response.data));
+        const fsStream = fs.createReadStream('/tmp/arvos-report.zip')
+        const unzipper = fsStream.pipe(unzip.Extract({ path: '/tmp/' }));
+        await new Promise((resolve, reject) => {
+          const endOnError = (error) => reject(error);
+          unzipper.on('close', () => resolve());
+          fsStream.on('error', endOnError);
+          unzipper.on('error', endOnError);
+        });
+
       } else {
           console.log(`ERROR >> ${res.status}`);
       }

@@ -18,9 +18,10 @@ class Routes {
     });
 
     router.get("/downloadReport/:owner/:repo/:run_id", (req, res, next) => {
-      this._actions.downloadWorkflowRunArtifact(req.params.owner, req.params.repo, req.params.run_id).then((artifacts) => { 
-        res.send(artifacts);
-      })
+      this._actions.downloadWorkflowRunArtifact(req.params.owner, req.params.repo, req.params.run_id)
+        .then((artifacts) => { 
+          res.send(artifacts);
+        })
     });
 
     router.get("/showReport/:run_id", (req, res, next) => {
