@@ -161,6 +161,7 @@ class Actions {
       console.error("Error getting initial data", e);
     } finally {
       debug("Finished refreshing runs");
+      this._runStatus.unloadDataTable()
       this._refreshingRuns = false;
     }
   };
@@ -179,6 +180,12 @@ class Actions {
 
     return this._runs;
   }
+
+  refreshRuns() {
+    this.refreshRuns();
+    return this._runs;
+  }
+
 
   async downloadArtifact(repoOwner, repoName, artifactId) { 
     const artifact = await this._gitHub.downloadWorflowArtifact(repoOwner, repoName, artifactId);

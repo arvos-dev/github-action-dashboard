@@ -17,6 +17,11 @@ class Routes {
       res.send(initialData);
     });
 
+    router.get("/refreshRuns", (req, res, next) => {
+      const data = this._actions.refreshRuns()
+      res.send(data)
+    })
+
     router.get("/downloadReport/:owner/:repo/:run_id", (req, res, next) => {
       this._actions.downloadWorkflowRunArtifact(req.params.owner, req.params.repo, req.params.run_id)
         .then((artifacts) => { 

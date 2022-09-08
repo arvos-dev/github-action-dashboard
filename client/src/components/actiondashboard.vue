@@ -215,6 +215,19 @@
                     </v-data-table>
             </v-card>
         </v-dialog>
+        <v-btn
+            key="mdi-pencil"
+            color="green"
+            fab
+            large
+            bottom
+            fixed
+            right
+            class="v-btn--example"
+            @click="refreshRuns()"
+        >
+        <v-icon color="white">mdi-refresh</v-icon>
+      </v-btn>
     </v-container>
 </template>
 
@@ -283,6 +296,9 @@ export default {
                 this.runs.push(run);
             }
         },
+        unloadDataTable() {
+            this.loading = false
+        }
     },
     mounted() {
         this.getData();
@@ -405,6 +421,15 @@ export default {
                     console.log("getData finally");
                     this.loading = false;
                 });
+        },
+        refreshRuns() {
+            this.runs = []
+            this.loading = true
+            axios
+                .get("/api/refreshRuns")
+                .then(() => {
+                    // this.loading = false
+                })
         },
         refreshRun(run) {
             // This

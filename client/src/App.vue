@@ -5,7 +5,7 @@
         </v-app-bar>
 
         <v-main>
-            <ActionDashboard />
+            <ActionDashboard ref="dashboard" />
         </v-main>
     </v-app>
 </template>

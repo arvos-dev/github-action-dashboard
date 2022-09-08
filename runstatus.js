@@ -16,6 +16,12 @@ class RunStatus {
       this._client.emit("updatedRun", run);
     }
   }
+
+  unloadDataTable() {
+    if (this._client) {
+      this._client.emit("unloadDataTable")
+    }
+  }
 }
 
 module.exports = RunStatus;
